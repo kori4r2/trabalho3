@@ -147,10 +147,15 @@ void get_schema(SCHEMA *registro){
 			get_node(new_node, table[i]);
 
 			new_node->next = registro->sentry;
-			new_node->previous = registro->sentry->previous->next;
+			new_node->previous = registro->sentry->previous;
 			registro->sentry->previous->next = new_node;
 			registro->sentry->previous = new_node;
 		}
+
+		for(i = 0; i <= n_elements; i++){
+			free(table[i]);
+		}
+		free(table);
 	}
 }
 
@@ -158,13 +163,11 @@ void delete_schema(SCHEMA **registro){
 	if(registro != NULL && (*registro) != NULL){
 		NODE *aux;
 		while((*registro)->n_elements > 0){
-			fprintf(stdout, "entrou no while, tamanho atual: %d\n", (*registro)->n_elements);
-			aux = (*registro)->sentry->previous->previous;
-			delete_node(&(aux->next));
-			aux->next = (*registro)->sentry;
-			(*registro)->sentry->previous = aux;
+			aux = (*registro)->sentry->previous;
+			aux->next->previous = aux->previous;
+			aux->previous->next = aux->next;
+			delete_node(&aux);
 			(*registro)->n_elements--;
-			fprintf(stdout, "elemento eliminado, novo tamanho: %d\n", (*registro)->n_elements);
 		}
 		delete_node(&((*registro)->sentry));
 		if((*registro)->name != NULL) free((*registro)->name);
@@ -256,5 +259,6 @@ char **read_schema(int *n_elements){
 	}
 
 	fclose(fp);
+	free(filename);
 	return table;
 }
