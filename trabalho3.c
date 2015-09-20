@@ -41,6 +41,7 @@ void get_node(NODE*, char*);
 void delete_node(NODE**);
 void get_item(char**, FILE*, SCHEMA*);
 void print_item(SCHEMA*, char**);
+void copy_data(FILE*, FILE*, long int, SCHEMA*, NODE*);
 
 // Funcoes------------------------------------------------------------------------------------------------------------
 SCHEMA *create_schema(void);
@@ -48,6 +49,7 @@ void get_schema(SCHEMA*);
 void dump_schema(SCHEMA*);
 void delete_schema(SCHEMA**);
 void dump_data(SCHEMA*);
+void get_index(SCHEMA*);
 
 // Main---------------------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[]){
@@ -69,7 +71,7 @@ int main(int argc, char *argv[]){
 			repeat = 0;
 		}
 
-		free(input);
+		if(input != NULL) free(input);
 	}while(repeat);
 
 	delete_schema(&schema);
@@ -115,7 +117,8 @@ void get_node(NODE *node, char *line){
 	}else if(strcmp(aux, STR_CHAR) == 0){
 		node->id = STRING_T;
 		aux = strtok(NULL, DELIMITERS);
-		node->size = atoi(aux) * sizeof(char);
+		
+node->size = atoi(aux) * sizeof(char);
 	}
 	aux = strtok(NULL, DELIMITERS);
 
@@ -261,8 +264,8 @@ void dump_data(SCHEMA *schema){
 	long int aux;
 	char **item = (char**)malloc(schema->n_elements * sizeof(char*));
 	char *filename = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
-	filename = strcpy(filename, schema->name);
-	filename = strcat(filename, ".data");
+	strcpy(filename, schema->name);
+	strcat(filename, ".data");
 	FILE *fp = fopen(filename, "rb");
 	if(fp == NULL){
 		fprintf(stderr, "could not open file\n");
@@ -289,6 +292,49 @@ void dump_data(SCHEMA *schema){
 	free(item);
 	free(filename);
 	fclose(fp);
+}
+
+void get_index(SCHEMA *schema){
+
+	int i;
+	long int cur_offset = 0;
+	NODE *aux = schema->sentry;
+	char *filename_index, *filename_data;
+	FILE *fp_data, *fp_index;
+
+	for(i = 0; i < schema->n_elements; i++){
+		aux = aux->next;
+		if(aux->order){
+			filename_data = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+			strcpy(filename_data, schema->name);
+			strcat(filename_data, ".data");
+			fp_data = fopen(filename_data, "rb");
+			if(fp_data == NULL){
+				fprintf(stderr, "could not open file\n");
+				exit(2);
+			}
+
+			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->sentry->name) + 6 + strlen(aux->name)));
+			strcpy(filename_index, schema->name);
+			strcat(filename_index, "-");
+			strcat(filename_index, aux->name);
+			strcat(filename_index, ".idx");
+			fp_index = fopen(filename_index, "wb");
+			if(fp_index == NULL){
+				fprintf(stderr, "error creating file");
+				exit(2);
+			}
+
+			copy_data(fp_data, fp_index, cur_offset, schema, aux);
+
+			if(fp_data != NULL) fclose(fp_data);
+			if(fp_index != NULL) fclose(fp_index);
+			if(filename_data != NULL) free(filename_data);
+			if(filename_index != NULL) free(filename_index);
+		}
+
+		cur_offset += aux->size;
+	}
 }
 
 // Funcoes de leitura-------------------------------------------------------------------------------------------------
@@ -355,4 +401,22 @@ char **read_schema(int *n_elements){
 	fclose(fp);
 	free(filename);
 	return table;
+}
+
+void copy_data(FILE *origin, FILE *destiny, long int cur_offset, SCHEMA *schema, NODE *type){
+
+	long int location;
+	int i;
+	int data_size = (int)sizeof(long int) + type->size;
+	void *aux = malloc(data_size);
+
+	for(i = 0; i < schema->n_elements; i++){
+		fseek(origin, (i * schema->size) + cur_offset, SEEK_SET);
+		fread(aux, type->size, 1, origin);
+		location = ftell(origin);
+		memcpy(aux+(type->size), &location, sizeof(long int));
+		fwrite(aux, data_size, 1,destiny);
+	}
+
+	if(aux != NULL) free(aux);
 }
