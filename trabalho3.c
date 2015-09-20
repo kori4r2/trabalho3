@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <string.h>
 
+#define LENGTH_ITEMS 100
 #define INT_T 0
 #define STRING_T 1
 #define DOUBLE_T 2
@@ -24,7 +25,7 @@ typedef struct node{
 	struct node *previous;
 }NODE;
 
-typedef struct registro{
+typedef struct schema{
 	char *name;
 	int n_elements;
 	struct node *sentry;
@@ -38,25 +39,45 @@ SCHEMA *create_schema(void);
 NODE *create_node(void);
 void get_node(NODE*, char*);
 void delete_node(NODE**);
+void get_item(char**, FILE*, SCHEMA*);
+void print_item(SCHEMA*, char**);
 
 // Funcoes------------------------------------------------------------------------------------------------------------
 SCHEMA *create_schema(void);
 void get_schema(SCHEMA*);
 void dump_schema(SCHEMA*);
 void delete_schema(SCHEMA**);
+void dump_data(SCHEMA*);
 
 // Main---------------------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[]){
 
+	int repeat, aux;
+	char *input;
+
 	SCHEMA *schema = create_schema();
 	get_schema(schema);
-	dump_schema(schema);
+	do{
+		repeat = 1;
+		input = my_get_line(stdin, &aux);
+
+		if(strcmp(input, "dump_schema") == 0){
+			dump_schema(schema);
+		}else if(strcmp(input, "dump_data") == 0){
+			dump_data(schema);
+		}else if(strcmp(input, "exit") == 0){
+			repeat = 0;
+		}
+
+		free(input);
+	}while(repeat);
+
 	delete_schema(&schema);
 
 	return 0;
 }
 
-// Funcoes internas do TAD
+// Funcoes internas do TAD--------------------------------------------------------------------------------------------
 NODE *create_node(void){
 	NODE *node = (NODE*)malloc(sizeof(NODE));
 
@@ -101,31 +122,67 @@ void get_node(NODE *node, char *line){
 	if(aux != NULL && strcmp(aux, "order") == 0) node->order = 1;
 }
 
-// Funcoes utilizadas do TAD
+void get_item(char **item, FILE *stream, SCHEMA *schema){
+
+	int aux_int;
+	double aux_double;
+
+	NODE *aux = schema->sentry;
+	int i;
+	for(i = 0; i < schema->n_elements; i++){
+
+		aux = aux->next;
+
+		if(aux->id == INT_T){
+			item[i] = (char*)realloc(item[i], LENGTH_ITEMS * sizeof(char));
+			fread(&aux_int, aux->size, 1, stream);
+			snprintf(item[i], LENGTH_ITEMS, "%d", aux_int);
+		}else if(aux->id == STRING_T){
+			item[i] = (char*)realloc(item[i], aux->size);
+			fread(item[i], aux->size, 1, stream);
+		}else if(aux->id == DOUBLE_T){
+			item[i] = (char*)realloc(item[i], LENGTH_ITEMS * sizeof(char));
+			fread(&aux_double, aux->size, 1, stream);
+			snprintf(item[i], LENGTH_ITEMS, "%.2lf", aux_double);
+		}
+	}
+}
+
+void print_item(SCHEMA *schema, char **item){
+
+	NODE *aux = schema->sentry;
+	int i;
+	for(i = 0; i < schema->n_elements; i++){
+		aux = aux->next;
+		printf("%s = %s\n", aux->name, item[i]);
+	}
+}
+
+// Funcoes utilizadas do TAD------------------------------------------------------------------------------------------
 
 SCHEMA *create_schema(void){
-	SCHEMA *registro = (SCHEMA*)malloc(sizeof(SCHEMA));
+	SCHEMA *schema = (SCHEMA*)malloc(sizeof(SCHEMA));
 
-	if(registro != NULL){
+	if(schema != NULL){
 		NODE *sentry = create_node();
 		if(sentry != NULL){
 			sentry->next = sentry;
 			sentry->previous = sentry;
-			registro->name = NULL;
-			registro->n_elements = 0;
-			registro->sentry = sentry;
-			registro->size = 0;
+			schema->name = NULL;
+			schema->n_elements = 0;
+			schema->sentry = sentry;
+			schema->size = 0;
 		}else{
-			free(registro);
-			registro = NULL;
+			free(schema);
+			schema = NULL;
 		}
 	}
 
-	return registro;
+	return schema;
 }
 
-void get_schema(SCHEMA *registro){
-	if(registro != NULL){
+void get_schema(SCHEMA *schema){
+	if(schema != NULL){
 		NODE *new_node;
 		int n_elements, i;
 		char *aux;
@@ -133,9 +190,9 @@ void get_schema(SCHEMA *registro){
 
 		aux = strtok(table[0], DELIMITERS);
 		aux = strtok(NULL, DELIMITERS);
-		registro->name = strdup(aux);
-		registro->n_elements = n_elements;
-		registro->size = 0;
+		schema->name = strdup(aux);
+		schema->n_elements = n_elements;
+		schema->size = 0;
 
 		for(i = 1; i <= n_elements; i++){
 			new_node = create_node();
@@ -145,12 +202,12 @@ void get_schema(SCHEMA *registro){
 			}
 
 			get_node(new_node, table[i]);
-			registro->size += new_node->size;
+			schema->size += new_node->size;
 
-			new_node->next = registro->sentry;
-			new_node->previous = registro->sentry->previous;
-			registro->sentry->previous->next = new_node;
-			registro->sentry->previous = new_node;
+			new_node->next = schema->sentry;
+			new_node->previous = schema->sentry->previous;
+			schema->sentry->previous->next = new_node;
+			schema->sentry->previous = new_node;
 		}
 
 		for(i = 0; i <= n_elements; i++){
@@ -160,30 +217,30 @@ void get_schema(SCHEMA *registro){
 	}
 }
 
-void delete_schema(SCHEMA **registro){
-	if(registro != NULL && (*registro) != NULL){
+void delete_schema(SCHEMA **schema){
+	if(schema != NULL && (*schema) != NULL){
 		NODE *aux;
-		while((*registro)->n_elements > 0){
-			aux = (*registro)->sentry->previous;
+		while((*schema)->n_elements > 0){
+			aux = (*schema)->sentry->previous;
 			aux->next->previous = aux->previous;
 			aux->previous->next = aux->next;
 			delete_node(&aux);
-			(*registro)->n_elements--;
+			(*schema)->n_elements--;
 		}
-		delete_node(&((*registro)->sentry));
-		if((*registro)->name != NULL) free((*registro)->name);
-		free(*registro);
-		(*registro) = NULL;
+		delete_node(&((*schema)->sentry));
+		if((*schema)->name != NULL) free((*schema)->name);
+		free(*schema);
+		(*schema) = NULL;
 	}
 }
 
-void dump_schema(SCHEMA *registro){
-	if(registro != NULL){
+void dump_schema(SCHEMA *schema){
+	if(schema != NULL){
 		int i;
-		NODE *aux = registro->sentry;
+		NODE *aux = schema->sentry;
 
-		printf("%s %s(%d bytes)\n", STR_TABLE, registro->name, registro->size);
-		for(i = 0; i < registro->n_elements; i++){
+		printf("%s %s(%d bytes)\n", STR_TABLE, schema->name, schema->size);
+		for(i = 0; i < schema->n_elements; i++){
 			aux = aux->next;
 			if(aux->id == INT_T){
 				printf("%s %s", aux->name, STR_INT);
@@ -198,7 +255,43 @@ void dump_schema(SCHEMA *registro){
 	}
 }
 
-// Funcoes de leitura
+void dump_data(SCHEMA *schema){
+	
+	int i, n_elements;
+	long int aux;
+	char **item = (char**)malloc(schema->n_elements * sizeof(char*));
+	char *filename = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+	filename = strcpy(filename, schema->name);
+	filename = strcat(filename, ".data");
+	FILE *fp = fopen(filename, "rb");
+	if(fp == NULL){
+		fprintf(stderr, "could not open file\n");
+		exit(2);
+	}
+
+	fseek(fp, 0, SEEK_END);
+	aux = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	n_elements = aux / schema->size;
+
+	for(i = 0; i < schema->n_elements; i++){
+		item[i] = NULL;
+	}
+
+	for(i = 0; i < n_elements; i++){
+		get_item(item, fp, schema);
+		print_item(schema, item);
+	}
+
+	for(i = 0; i < schema->n_elements; i++){
+		if(item[i] != NULL) free(item[i]);
+	}
+	free(item);
+	free(filename);
+	fclose(fp);
+}
+
+// Funcoes de leitura-------------------------------------------------------------------------------------------------
 
 char *my_get_line(FILE *stream, int *ending){
 	char *string = NULL;
