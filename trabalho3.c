@@ -145,6 +145,7 @@ void get_schema(SCHEMA *registro){
 			}
 
 			get_node(new_node, table[i]);
+			registro->size += new_node->size;
 
 			new_node->next = registro->sentry;
 			new_node->previous = registro->sentry->previous;
@@ -181,7 +182,7 @@ void dump_schema(SCHEMA *registro){
 		int i;
 		NODE *aux = registro->sentry;
 
-		printf("%s %s\n", STR_TABLE, registro->name);
+		printf("%s %s(%d bytes)\n", STR_TABLE, registro->name, registro->size);
 		for(i = 0; i < registro->n_elements; i++){
 			aux = aux->next;
 			if(aux->id == INT_T){
@@ -192,7 +193,7 @@ void dump_schema(SCHEMA *registro){
 				printf("%s %s[%d]", aux->name, STR_CHAR, (aux->size/(int)sizeof(char)));
 			}
 			if(aux->order) printf(" %s", STR_ORDER);
-			printf("\n");
+			printf("(%d bytes)\n", aux->size);
 		}
 	}
 }
