@@ -69,7 +69,10 @@ int main(int argc, char *argv[]){
 
 	do{
 		repeat = 1;
-		input = my_get_line(stdin, &aux);
+		do{
+			input = my_get_line(stdin, &aux);
+		}while(aux == -1);
+		if(input == NULL) fprintf(stderr, "chamada errada\n");
 
 		if(strcmp(input, "dump_schema") == 0){
 			dump_schema(schema);
@@ -516,7 +519,6 @@ void insert_data(SCHEMA *schema){
 			scanf("%lf", (double*)aux);
 		}else if(node->id == STRING_T){
 			free(aux);
-			fgetc(stdin);
 			aux = (void*)my_gets(stdin, (node->size/sizeof(char)));
 		}
 		fwrite(aux, node->size, 1, fp_data);
@@ -534,13 +536,14 @@ char *my_get_line(FILE *stream, int *ending){
 
 	do{
 		input = fgetc(stream);
-	}while((char)input != '\n' && input != EOF && iscntrl(input));
+	}while((char)input != '\n' && input != EOF && !isalnum(input));
 
-	if((char)input == '\n' || input == EOF){   // Chamada da função em local invalido do arquivo:
-		if(input == '\n') (*ending) = 1;   // -linha vazia
-		else (*ending) = -2;               // -final do arquivo
+	if(/*(char)input == '\n' || */input == EOF){   // Chamada da função em local invalido do arquivo:
+	//	if(input == '\n') (*ending) = 1;       // -linha vazia
+		/*else*/ (*ending) = -2;               // -final do arquivo
 		return NULL;
 	}
+	while(input == '\n') input = fgetc(stream);
 
 	do{
 		string = (char*)realloc(string, (size+1) * sizeof(char));

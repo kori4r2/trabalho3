@@ -1,0 +1,14 @@
+table mtcars
+name char[30] order
+id int order
+mpg double
+cyl int
+disp double
+hp int
+drat double 
+wt double
+qsec double
+vs int
+am int 
+gear int
+carb int
