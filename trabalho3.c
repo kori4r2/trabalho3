@@ -63,6 +63,7 @@ int main(int argc, char *argv[]){
 
 	SCHEMA *schema = create_schema();
 	get_schema(schema);
+
 	do{
 		repeat = 1;
 		input = my_get_line(stdin, &aux);
@@ -73,6 +74,9 @@ int main(int argc, char *argv[]){
 			dump_data(schema);
 		}else if(strcmp(input, "dump_index") == 0){
 			print_index(schema);
+		}else if(strcmp(input, "update_index") == 0){
+			get_index(schema);
+			sort_index(schema);
 		}else if(strcmp(input, "exit") == 0){
 			repeat = 0;
 		}
@@ -232,6 +236,9 @@ SCHEMA *create_schema(void){
 			free(schema);
 			schema = NULL;
 		}
+	}else{
+		fprintf(stderr, "error creating schema\n");
+		exit(3);
 	}
 
 	return schema;
@@ -325,7 +332,7 @@ void dump_data(SCHEMA *schema){
 	FILE *fp = fopen(filename, "rb");
 	if(fp == NULL){
 		fprintf(stderr, "could not open file\n");
-		exit(2);
+		exit(1);
 	}
 
 	fseek(fp, 0, SEEK_END);
@@ -367,7 +374,7 @@ void get_index(SCHEMA *schema){
 			fp_data = fopen(filename_data, "rb");
 			if(fp_data == NULL){
 				fprintf(stderr, "could not open file\n");
-				exit(2);
+				exit(1);
 			}
 
 			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(aux->name)));
@@ -378,7 +385,7 @@ void get_index(SCHEMA *schema){
 			fp_index = fopen(filename_index, "wb");
 			if(fp_index == NULL){
 				fprintf(stderr, "error creating file");
-				exit(2);
+				exit(1);
 			}
 
 			copy_data(fp_data, fp_index, cur_offset, schema, aux);
