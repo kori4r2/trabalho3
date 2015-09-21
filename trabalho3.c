@@ -34,6 +34,7 @@ typedef struct schema{
 
 // Funcoes auxiliares-------------------------------------------------------------------------------------------------
 char *my_get_line(FILE*, int*);
+char *my_gets(FILE*, int);
 char **read_schema(int*);
 SCHEMA *create_schema(void);
 NODE *create_node(void);
@@ -45,6 +46,7 @@ void copy_data(FILE*, FILE*, long int, SCHEMA*, NODE*);
 void swap(FILE*, NODE*, int, int);
 int compare(FILE*, NODE*, int, int);
 
+
 // Funcoes------------------------------------------------------------------------------------------------------------
 SCHEMA *create_schema(void);
 void get_schema(SCHEMA*);
@@ -54,6 +56,7 @@ void dump_data(SCHEMA*);
 void get_index(SCHEMA*);
 void print_index(SCHEMA*);
 void sort_index(SCHEMA*);
+void insert_data(SCHEMA*);
 
 // Main---------------------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[]){
@@ -77,6 +80,8 @@ int main(int argc, char *argv[]){
 		}else if(strcmp(input, "update_index") == 0){
 			get_index(schema);
 			sort_index(schema);
+		}else if(strcmp(input, "insert") == 0){
+			insert_data(schema);
 		}else if(strcmp(input, "exit") == 0){
 			repeat = 0;
 		}
@@ -486,6 +491,41 @@ void sort_index(SCHEMA *schema){
 	}
 }
 
+void insert_data(SCHEMA *schema){
+
+	int i;
+	void *aux;
+	NODE *node = schema->sentry;
+	char *filename = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+	strcpy(filename, schema->name);
+	strcat(filename, ".data");
+	FILE *fp_data = fopen(filename, "r+b");
+	if(fp_data == NULL){
+		fprintf(stderr, "could not open file\n");
+		exit(1);
+	}
+
+	fseek(fp_data, 0, SEEK_END);
+	for(i = 0; i < schema->n_elements; i++){
+		node = node->next;
+		aux = malloc(node->size);
+
+		if(node->id == INT_T){
+			scanf("%d", (int*)aux);
+		}else if(node->id == DOUBLE_T){
+			scanf("%lf", (double*)aux);
+		}else if(node->id == STRING_T){
+			free(aux);
+			fgetc(stdin);
+			aux = (void*)my_gets(stdin, (node->size/sizeof(char)));
+		}
+		fwrite(aux, node->size, 1, fp_data);
+		if(aux != NULL) free(aux);
+	}
+	free(filename);
+	fclose(fp_data);
+}
+
 // Funcoes de leitura-------------------------------------------------------------------------------------------------
 
 char *my_get_line(FILE *stream, int *ending){
@@ -513,6 +553,27 @@ char *my_get_line(FILE *stream, int *ending){
 	if(input == '\n') (*ending) = 0;
 	else (*ending) = -1;
 
+	return string;
+}
+
+char *my_gets(FILE *stream, int str_size){
+	char *string = (char*)calloc(str_size, 1);
+	int input, cur_size = 0;
+
+	do{
+		input = fgetc(stream);
+	}while( ((char)input == ' ' || (char)input == '\n') && input != EOF);
+	if(input == EOF){
+		fprintf(stderr, "error reading string");
+		exit(4);
+	}
+
+	do{
+		string[cur_size++] = (char)input;
+		input = fgetc(stream);
+	}while((char)input != '\n' && input != EOF && cur_size < str_size-1);
+
+	string[cur_size] = '\0';
 	return string;
 }
 
