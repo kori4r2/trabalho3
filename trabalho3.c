@@ -44,7 +44,10 @@ void get_item(char**, FILE*, SCHEMA*);
 void print_item(SCHEMA*, char**);
 void copy_data(FILE*, FILE*, long int, SCHEMA*, NODE*);
 void swap(FILE*, NODE*, int, int);
-int compare(FILE*, NODE*, int, int);
+int compare_in_file(FILE*, NODE*, int, int);
+long int sequential_search(FILE*, SCHEMA*, NODE*, char*, int*, int);
+long int binary_search(FILE*, SCHEMA*, NODE*, char*, int, int, int*);
+int compare_outside(NODE*, void*, char*);
 
 
 // Funcoes------------------------------------------------------------------------------------------------------------
@@ -57,6 +60,7 @@ void get_index(SCHEMA*);
 void print_index(SCHEMA*);
 void sort_index(SCHEMA*);
 void insert_data(SCHEMA*);
+void search_index_data(SCHEMA*);
 
 // Main---------------------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[]){
@@ -69,9 +73,7 @@ int main(int argc, char *argv[]){
 
 	do{
 		repeat = 1;
-		do{
-			input = my_get_line(stdin, &aux);
-		}while(aux == -1);
+		input = my_get_line(stdin, &aux);
 		if(input == NULL) fprintf(stderr, "chamada errada\n");
 
 		if(strcmp(input, "dump_schema") == 0){
@@ -85,6 +87,8 @@ int main(int argc, char *argv[]){
 			sort_index(schema);
 		}else if(strcmp(input, "insert") == 0){
 			insert_data(schema);
+		}else if(strcmp(input, "select") == 0){
+			search_index_data(schema);
 		}else if(strcmp(input, "exit") == 0){
 			repeat = 0;
 		}
@@ -197,7 +201,7 @@ void swap(FILE *fp, NODE *node, int i, int j){
 	free(aux2);
 }
 
-int compare(FILE *fp, NODE *node, int i, int j){
+int compare_in_file(FILE *fp, NODE *node, int i, int j){
 
 	long int data_size = (node->size + sizeof(long int));
 	int result = 0;
@@ -223,6 +227,82 @@ int compare(FILE *fp, NODE *node, int i, int j){
 	free(aux1);
 	free(aux2);
 
+	return result;
+}
+
+int compare_outside(NODE *node, void *check, char *key){
+	int result = 0;
+
+	if(node->id == INT_T){
+		if( (*((int*)check)) > atoi(key) ) result = -1;
+		else if( (*((int*)check)) < atoi(key) ) result = 1;
+	}else if(node->id == DOUBLE_T){
+		if( (*((double*)check)) > atof(key) ) result = -1;
+		else if( (*((double*)check)) < atof(key) ) result = 1;
+	}else if(node->id == STRING_T){
+		result = strcmp(key, (char*)check);
+	}
+
+	return result;
+}
+
+long int sequential_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int *test_count, int offset){
+	char *filename_data;
+	FILE *fp_data;
+	int i, n_elements, compare_result;
+	long int end_file;
+	void *aux;
+	
+	filename_data = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+	strcpy(filename_data, schema->name);
+	strcat(filename_data, ".data");
+	fp_data = fopen(filename_data, "rb");
+	if(fp_data == NULL){
+		fprintf(stderr, "could not open file\n");
+		exit(1);
+	}
+	fseek(fp_data, 0, SEEK_END);
+	end_file = ftell(fp_data);
+	fseek(fp_data, 0, SEEK_SET);
+	n_elements = (int)end_file/schema->size;
+
+	aux = malloc(node->size);
+	i = 0;
+	do{
+		(*test_count)++;
+		fseek(fp_data, (i*schema->size)+offset, SEEK_SET);
+		fread(aux, node->size, 1, fp_data);
+		compare_result = compare_outside(node, aux, search_key);
+		i++;
+	}while(i < n_elements && compare_result != 0);
+
+	free(filename_data);
+	free(aux);
+	fclose(fp_data);
+
+	if(compare_result == 0) return (i*schema->size);
+	else return -1;
+}
+long int binary_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int begin, int end, int *test_count){
+
+	if(begin > end) return -1;
+
+	int middle = (begin+end)/2, compare_result;
+	long int result;
+	void *aux = malloc(node->size);
+	fseek(fp, middle*(node->size + sizeof(long int)), SEEK_SET);
+	fread(aux, node->size, 1, fp);
+
+	compare_result = compare_outside(node, aux, search_key);
+	(*test_count)++;
+	free(aux);
+	if(compare_result < 0){
+		result = binary_search(fp, schema, node, search_key, begin, middle-1, test_count);
+	}else if(compare_result > 0){
+		result = binary_search(fp, schema, node, search_key, middle+1, end, test_count);
+	}else{
+		fread(&result, sizeof(long int), 1, fp);
+	}
 	return result;
 }
 
@@ -481,7 +561,7 @@ void sort_index(SCHEMA *schema){
 
 				for(j = 1; j < n_elements; j++){
 
-					for(k = j-1; (k >= 0) && (compare(fp_index, node, k, k+1) > 0); k--){
+					for(k = j-1; (k >= 0) && (compare_in_file(fp_index, node, k, k+1) > 0); k--){
 						swap(fp_index, node, k, k+1);
 					}
 
@@ -526,6 +606,116 @@ void insert_data(SCHEMA *schema){
 	}
 	free(filename);
 	fclose(fp_data);
+}
+
+void search_index_data(SCHEMA *schema){
+
+	int i, test_count, search_return, n_elements, offset;
+	long int location;
+	void *aux;
+	char *filename_index, *search_term, *filename_data, *print_field, *search_key;
+	NODE *node = schema->sentry;
+	FILE *fp_index, *fp_data;
+
+	search_term = my_get_line(stdin, &i);
+	search_key = my_get_line(stdin, &i);
+	print_field = my_get_line(stdin, &i);
+
+	test_count = 0;
+	offset = 0;
+	for(i = 0; i < schema->n_elements; i++){
+		node = node->next;
+		if(strcmp(search_term, node->name) == 0 && node->order){
+
+			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
+			strcpy(filename_index, schema->name);
+			strcat(filename_index, "-");
+			strcat(filename_index, node->name);
+			strcat(filename_index, ".idx");
+			fp_index = fopen(filename_index, "rb");
+
+			if(fp_index != NULL){
+
+				fseek(fp_index, 0, SEEK_END);
+				location = ftell(fp_index);
+				n_elements = (int)(location/(sizeof(long int) + node->size));
+				fseek(fp_index, 0, SEEK_SET);
+
+				search_return = binary_search(fp_index, schema, node, search_key, 0, n_elements-1, &test_count);
+				fclose(fp_index);
+				if(search_return == -1){
+
+					filename_data = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+					strcpy(filename_data, schema->name);
+					strcat(filename_data, ".data");
+					fp_data = fopen(filename_data, "rb");
+					if(fp_data == NULL){
+						fprintf(stderr, "could not open file\n");
+						exit(1);
+					}
+
+					search_return = sequential_search(fp_data, schema, node, search_key, &test_count, offset);
+					fclose(fp_data);
+					free(filename_data);
+				}
+			}else{
+				fprintf(stderr, "could not open file\n");
+				exit(1);
+			}
+
+			free(filename_index);
+
+			printf("%d\n", test_count);
+			if(search_return == -1){
+				printf("value not found\n");
+			}else{
+				node = schema->sentry;
+				offset = 0;
+				for(i = 0; i < schema->n_elements; i++){
+					node = node->next;
+					if(strcmp(print_field, node->name) == 0){
+						break;
+					}
+					offset += node->size;
+				}
+
+				filename_data = (char*)malloc(sizeof(char) * (strlen(schema->name)+6));
+				strcpy(filename_data, schema->name);
+				strcat(filename_data, ".data");
+				fp_data = fopen(filename_data, "r+b");
+				if(fp_data == NULL){
+					fprintf(stderr, "could not open file\n");
+					exit(1);
+				}
+
+				fseek(fp_data, search_return+offset, SEEK_SET);
+				aux = malloc(node->size);
+				fread(aux, node->size, 1, fp_data);
+				fclose(fp_data);
+
+				if(node->id == INT_T){
+					printf("%d\n", *((int*)aux));
+				}else if(node->id == DOUBLE_T){
+					printf("%.2lf\n", *((double*)aux));
+				}else if(node->id == STRING_T){
+					printf("%s\n", (char*)aux);
+				}
+				free(aux);
+				free(filename_data);
+			}
+			i = schema->n_elements+1;
+		}
+		if(i <= schema->n_elements){
+			offset += node->size;
+		}
+	}
+
+	if(test_count == 0){
+		printf("index not found\n");
+	}
+	free(search_term);
+	free(search_key);
+	free(print_field);
 }
 
 // Funcoes de leitura-------------------------------------------------------------------------------------------------
