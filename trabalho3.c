@@ -20,7 +20,7 @@ typedef struct node{
 	int order;
 	int id;
 	char *name;
-	int size;
+	long int size;
 	struct node *next;
 	struct node *previous;
 }NODE;
@@ -42,6 +42,8 @@ void delete_node(NODE**);
 void get_item(char**, FILE*, SCHEMA*);
 void print_item(SCHEMA*, char**);
 void copy_data(FILE*, FILE*, long int, SCHEMA*, NODE*);
+void swap(FILE*, NODE*, int, int);
+int compare(FILE*, NODE*, int, int);
 
 // Funcoes------------------------------------------------------------------------------------------------------------
 SCHEMA *create_schema(void);
@@ -50,6 +52,8 @@ void dump_schema(SCHEMA*);
 void delete_schema(SCHEMA**);
 void dump_data(SCHEMA*);
 void get_index(SCHEMA*);
+void print_index(SCHEMA*);
+void sort_index(SCHEMA*);
 
 // Main---------------------------------------------------------------------------------------------------------------
 int main(int argc, char *argv[]){
@@ -67,6 +71,8 @@ int main(int argc, char *argv[]){
 			dump_schema(schema);
 		}else if(strcmp(input, "dump_data") == 0){
 			dump_data(schema);
+		}else if(strcmp(input, "dump_index") == 0){
+			print_index(schema);
 		}else if(strcmp(input, "exit") == 0){
 			repeat = 0;
 		}
@@ -117,8 +123,7 @@ void get_node(NODE *node, char *line){
 	}else if(strcmp(aux, STR_CHAR) == 0){
 		node->id = STRING_T;
 		aux = strtok(NULL, DELIMITERS);
-		
-node->size = atoi(aux) * sizeof(char);
+		node->size = atoi(aux) * sizeof(char);
 	}
 	aux = strtok(NULL, DELIMITERS);
 
@@ -159,6 +164,54 @@ void print_item(SCHEMA *schema, char **item){
 		aux = aux->next;
 		printf("%s = %s\n", aux->name, item[i]);
 	}
+}
+
+void swap(FILE *fp, NODE *node, int i, int j){
+
+	long int data_size = (node->size + sizeof(long int));
+	void *aux1 = malloc(data_size);
+	void *aux2 = malloc(data_size);
+
+	fseek(fp, i * data_size, SEEK_SET);
+	fread(aux1, data_size, 1, fp);
+	fseek(fp, j * data_size, SEEK_SET);
+	fread(aux2, data_size, 1, fp);
+	fseek(fp, j * data_size, SEEK_SET);
+	fwrite(aux1, data_size, 1, fp);
+	fseek(fp, i * data_size, SEEK_SET);
+	fwrite(aux2, data_size, 1, fp);
+
+	free(aux1);
+	free(aux2);
+}
+
+int compare(FILE *fp, NODE *node, int i, int j){
+
+	long int data_size = (node->size + sizeof(long int));
+	int result = 0;
+	void *aux1 = malloc(node->size);
+	void *aux2 = malloc(node->size);
+
+	fseek(fp, i * data_size, SEEK_SET);
+	fread(aux1, node->size, 1, fp);
+	fseek(fp, j * data_size, SEEK_SET);
+	fread(aux2, node->size, 1, fp);
+
+
+	if(node->id == INT_T){
+		if( (*((int*)aux1)) < (*((int*)aux2)) ) result = -1;
+		else if( (*((int*)aux1)) > (*((int*)aux2)) ) result = 1;
+	}else if(node->id == DOUBLE_T){
+		if( (*((double*)aux1)) < (*((double*)aux2)) ) result = -1;
+		else if( (*((double*)aux1)) > (*((double*)aux2)) ) result = 1;
+	}else if(node->id == STRING_T){
+		result = strcmp((char*)aux1, (char*)aux2);
+	}
+
+	free(aux1);
+	free(aux2);
+
+	return result;
 }
 
 // Funcoes utilizadas do TAD------------------------------------------------------------------------------------------
@@ -217,6 +270,9 @@ void get_schema(SCHEMA *schema){
 			free(table[i]);
 		}
 		free(table);
+
+		get_index(schema);
+		sort_index(schema);
 	}
 }
 
@@ -250,10 +306,10 @@ void dump_schema(SCHEMA *schema){
 			}else if(aux->id == DOUBLE_T){
 				printf("%s %s",aux->name, STR_DOUBLE);
 			}else if(aux->id == STRING_T){
-				printf("%s %s[%d]", aux->name, STR_CHAR, (aux->size/(int)sizeof(char)));
+				printf("%s %s[%ld]", aux->name, STR_CHAR, (aux->size/(int)sizeof(char)));
 			}
 			if(aux->order) printf(" %s", STR_ORDER);
-			printf("(%d bytes)\n", aux->size);
+			printf("(%ld bytes)\n", aux->size);
 		}
 	}
 }
@@ -314,7 +370,7 @@ void get_index(SCHEMA *schema){
 				exit(2);
 			}
 
-			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->sentry->name) + 6 + strlen(aux->name)));
+			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(aux->name)));
 			strcpy(filename_index, schema->name);
 			strcat(filename_index, "-");
 			strcat(filename_index, aux->name);
@@ -334,6 +390,92 @@ void get_index(SCHEMA *schema){
 		}
 
 		cur_offset += aux->size;
+	}
+}
+
+void print_index(SCHEMA *schema){
+
+	int i, j, n_elements;
+	long int location;
+	void *aux;
+	char *filename_index;
+	NODE *node = schema->sentry;
+	FILE *fp_index;
+
+	for(i = 0; i < schema->n_elements; i++){
+		node = node->next;
+		if(node->order){
+			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
+			strcpy(filename_index, schema->name);
+			strcat(filename_index, "-");
+			strcat(filename_index, node->name);
+			strcat(filename_index, ".idx");
+			fp_index = fopen(filename_index, "rb");
+
+			if(fp_index != NULL){
+				fseek(fp_index, 0, SEEK_END);
+				location = ftell(fp_index);
+				n_elements = (int)(location/(sizeof(long int) + node->size));
+				fseek(fp_index, 0, SEEK_SET);
+
+				for(j = 0; j < n_elements; j++){
+					aux = malloc(node->size);
+					fread(aux, node->size, 1, fp_index);
+					fread(&location, sizeof(long int), 1, fp_index);
+
+					if(node->id == INT_T){
+						printf("%d = %ld\n", *((int*)aux), location);
+					}else if(node->id == DOUBLE_T){
+						printf("%.2lf = %ld\n", *((double*)aux), location);
+					}else if(node->id == STRING_T){
+						printf("%s = %ld\n", (char*)aux, location);
+					}
+					free(aux);
+				}
+				fclose(fp_index);
+			}
+
+			free(filename_index);
+		}
+	}
+}
+
+void sort_index(SCHEMA *schema){
+
+	int i, j, k, n_elements;
+	long int location;
+	char *filename_index;
+	NODE *node = schema->sentry;
+	FILE *fp_index;
+
+	for(i = 0; i < schema->n_elements; i++){
+		node = node->next;
+		if(node->order){
+			filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
+			strcpy(filename_index, schema->name);
+			strcat(filename_index, "-");
+			strcat(filename_index, node->name);
+			strcat(filename_index, ".idx");
+			fp_index = fopen(filename_index, "r+b");
+
+			if(fp_index != NULL){
+				fseek(fp_index, 0, SEEK_END);
+				location = ftell(fp_index);
+				n_elements = (int)(location/(sizeof(long int) + node->size));
+				fseek(fp_index, 0, SEEK_SET);
+
+				for(j = 1; j < n_elements; j++){
+
+					for(k = j-1; (k >= 0) && (compare(fp_index, node, k, k+1) > 0); k--){
+						swap(fp_index, node, k, k+1);
+					}
+
+				}
+				fclose(fp_index);
+			}
+
+			free(filename_index);
+		}
 	}
 }
 
@@ -406,14 +548,19 @@ char **read_schema(int *n_elements){
 void copy_data(FILE *origin, FILE *destiny, long int cur_offset, SCHEMA *schema, NODE *type){
 
 	long int location;
-	int i;
+	int i, n_elements;
 	int data_size = (int)sizeof(long int) + type->size;
 	void *aux = malloc(data_size);
 
-	for(i = 0; i < schema->n_elements; i++){
+	fseek(origin, 0, SEEK_END);
+	location = ftell(origin);
+	n_elements = (int)(location/schema->size);
+	fseek(origin, 0, SEEK_SET);
+
+	for(i = 0; i < n_elements; i++){
 		fseek(origin, (i * schema->size) + cur_offset, SEEK_SET);
 		fread(aux, type->size, 1, origin);
-		location = ftell(origin);
+		location = (long int)(i * schema->size);
 		memcpy(aux+(type->size), &location, sizeof(long int));
 		fwrite(aux, data_size, 1,destiny);
 	}
