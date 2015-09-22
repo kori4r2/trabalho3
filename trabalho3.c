@@ -45,7 +45,7 @@ void print_item(SCHEMA*, char**);
 void copy_data(FILE*, FILE*, long int, SCHEMA*, NODE*);
 void swap(FILE*, NODE*, int, int);
 int compare_in_file(FILE*, NODE*, int, int);
-long int sequential_search(FILE*, SCHEMA*, NODE*, char*, int*, int);
+long int sequential_search(FILE*, SCHEMA*, NODE*, char*, int*, long int);
 long int binary_search(FILE*, SCHEMA*, NODE*, char*, int, int, int*);
 int compare_outside(NODE*, void*, char*);
 
@@ -246,10 +246,10 @@ int compare_outside(NODE *node, void *check, char *key){
 	return result;
 }
 
-long int sequential_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int *test_count, int offset){
-	char *filename_data;
-	FILE *fp_data;
-	int i, n_elements, compare_result;
+long int sequential_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int *test_count, long int offset){
+	char *filename_data, *filename_index;
+	FILE *fp_data, *fp_index;
+	int i, n_elements_data, n_elements_index, compare_result;
 	long int end_file;
 	void *aux;
 	
@@ -264,25 +264,40 @@ long int sequential_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_ke
 	fseek(fp_data, 0, SEEK_END);
 	end_file = ftell(fp_data);
 	fseek(fp_data, 0, SEEK_SET);
-	n_elements = (int)end_file/schema->size;
+	n_elements_data = (int)end_file/schema->size;
+
+	filename_index = (char*)malloc(sizeof(char) * (strlen(schema->name) + 6 + strlen(node->name)));
+	strcpy(filename_index, schema->name);
+	strcat(filename_index, "-");
+	strcat(filename_index, node->name);
+	strcat(filename_index, ".idx");
+	fp_index = fopen(filename_index, "rb");
+	fseek(fp_index, 0, SEEK_END);
+	end_file = ftell(fp_index);
+	fseek(fp_index, 0, SEEK_SET);
+	n_elements_index = (int)(end_file/(node->size+sizeof(long int)));
 
 	aux = malloc(node->size);
-	i = 0;
-	do{
+	i = n_elements_index;
+	compare_result = 1;
+
+	while(i < n_elements_data && compare_result != 0){
 		(*test_count)++;
 		fseek(fp_data, (i*schema->size)+offset, SEEK_SET);
 		fread(aux, node->size, 1, fp_data);
 		compare_result = compare_outside(node, aux, search_key);
 		i++;
-	}while(i < n_elements && compare_result != 0);
-
+	}
 	free(filename_data);
+	free(filename_index);
 	free(aux);
 	fclose(fp_data);
+	fclose(fp_index);
 
-	if(compare_result == 0) return (i*schema->size);
+	if(compare_result == 0) return ((i-1)*schema->size);
 	else return -1;
 }
+
 long int binary_search(FILE *fp, SCHEMA *schema, NODE *node, char *search_key, int begin, int end, int *test_count){
 
 	if(begin > end) return -1;
@@ -441,7 +456,8 @@ void dump_data(SCHEMA *schema){
 		if(item[i] != NULL) free(item[i]);
 	}
 	free(item);
-	free(filename);
+	
+free(filename);
 	fclose(fp);
 }
 
@@ -610,8 +626,8 @@ void insert_data(SCHEMA *schema){
 
 void search_index_data(SCHEMA *schema){
 
-	int i, test_count, search_return, n_elements, offset;
-	long int location;
+	int i, test_count, search_return, n_elements;
+	long int location, offset;
 	void *aux;
 	char *filename_index, *search_term, *filename_data, *print_field, *search_key;
 	NODE *node = schema->sentry;
