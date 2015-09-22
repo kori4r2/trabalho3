@@ -1,0 +1,29 @@
+	   	 typedef struct node{
+		         int order;
+		         int id;
+		         char *name;
+		         int size;
+		         struct node *next;
+		         struct node *previous;
+		 }NODE;
+		
+	 	 typedef struct registro{
+		         char *name;
+		         int n_elements;
+		         struct node *sentry;
+		         int size;
+		 }SCHEMA;
+
+
+
+		  #define LENGTH_ITEMS 100
+		  #define INT_T 0
+		  #define STRING_T 1
+		  #define DOUBLE_T 2
+
+		  #define STR_TABLE "table"
+		  #define STR_CHAR "char"
+		  #define STR_INT "int"
+		  #define STR_DOUBLE "double"
+		  #define DELIMITERS " []\t"
+		  #define STR_ORDER "order"

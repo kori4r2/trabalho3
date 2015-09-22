@@ -3,8 +3,10 @@
 
 			Italo Tobler Silva - nUSP 8551910		17/09/2015
 
-	OBS: Recomendável para a leitura do codigo manter aberto uma copia dos defines e dos conteudos das structs
+	OBS1: Recomendável para a leitura do codigo manter aberto uma copia dos defines e dos conteudos das structs
 	para facilitar consulta
+
+	OBS2: Nao houve tempo para ser feita a documentação das funções, mas elas foram devidamente comentadas internamente
 */
 #include <stdio.h>
 #include <stdlib.h>
